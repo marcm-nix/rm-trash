@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+
+# CONFIG
+trash_dir="$HOME/.trash";
+log="$trash_dir/_TRASH.log";
+confirm_removing=true
+
+
+check_config () {
+
+    if [ "$log" = '' ] || [ "$confirm_removing" = '' ] || [ "$trash_dir" = '' ]; then
+        echo PLEASE SET UP log, confirm and trash_dir VARS IN THE SCRIPT
+        exit;
+    fi
+
+    if [ ! -d "$trash_dir" ]; then
+        mkdir -p "$trash_dir";
+    fi
+
+    timestamp="`date  +"%s"`"
+
+}
+
+safe_remove () {
+    local file="$1"
+    local original="$1"
+    local uuid="$(uuidgen)"
+
+    if [ "$confirm_removing" = true ]; then
+
+        while true; do
+            read -p "Remove "$file"? [Y/n]:" yn
+            case $yn in
+                [Yy]* ) status=true; break;;
+                [Nn]* ) status=false; break;;
+                * )  [ "$yn" = '' ] && status=true && break;;
+            esac
+        done;
+    else
+        status=true
+    fi
+
+    if [ "$status" = true ]; then
+        name=""${timestamp}_${uuid}""
+        mv "${file}" "${trash_dir}/${name}"
+        printf '%s\t%s\t%s\n' "$timestamp" "$name" "$original" >> "$log"
+        echo "$file REMOVED"
+    else
+        echo "$file CANCELED"
+    fi
+
+}
+
+
+if [ "$#" -eq 0 ]; then
+    echo "Pass files to remove"
+    exit;
+fi
+
+check_config
+
+
+for trashfile in "$@"; do
+
+    if [ -h "$trashfile" ]; then
+
+        realfile="$(readlink -f "$trashfile")"
+        printf '"%s" is a symlink to "%s"\n' "$trashfile" "$realfile"
+        while true; do
+            read -p "you wish to remove [S]ymlink, [F]ile or [B]oth ([A]bort)" which
+            case $which in
+                [Ss]* ) safe_remove "$trashfile"; break;;
+                [Ff]* ) safe_remove "$realfile"; break;;
+                [Bb]* ) safe_remove "$trashfile"; safe_remove "$realfile"; break;;
+                [Aa]* ) echo 'Aborted'; break;;
+            esac
+        done;
+    else
+        filepath="$(pwd)/$(basename "$trashfile")"
+        safe_remove "$filepath"
+    fi
+done
